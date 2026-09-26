@@ -1,0 +1,6 @@
+{
+  "name": "StudySphere",
+  "description": "All-in-one AI study platform, social learning feed, coding and math lab, and student project hub.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

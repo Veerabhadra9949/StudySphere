@@ -1,0 +1,38 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isImageBelowLimit(maxSizeMB) {
+      return request.resource.size < maxSizeMB * 1024 * 1024
+          && request.resource.contentType.matches('image/.*');
+    }
+
+    // User Profile Avatars
+    match /avatars/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if isOwner(userId) && isImageBelowLimit(5);
+    }
+
+    // Post & Story Attachments
+    match /posts/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if isOwner(userId) && (
+        request.resource.size < 25 * 1024 * 1024 // 25MB max for study docs/media
+      );
+    }
+
+    // Coding Lab project exports & assets
+    match /projects/{userId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId) && request.resource.size < 10 * 1024 * 1024;
+    }
+  }
+}

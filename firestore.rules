@@ -1,0 +1,100 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+        (request.auth.token.admin == true || 
+         request.auth.token.email == "sampangiveerabadhra@gmail.com" ||
+         request.auth.uid == "admin_master");
+    }
+    
+    function isValidContent(text, maxLen) {
+      return text is string && text.size() > 0 && text.size() <= maxLen;
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      allow read: if true; // Public student profiles
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Posts Collection
+    match /posts/{postId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && 
+        isValidContent(request.resource.data.title, 200) &&
+        isValidContent(request.resource.data.content, 10000);
+      allow update: if isAuthenticated() && (
+        request.auth.uid == resource.data.authorId || 
+        // Allow updating likesCount and bookmarks by any authenticated user
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likesCount', 'sharesCount', 'commentsCount']) ||
+        isAdmin()
+      );
+      allow delete: if isAuthenticated() && (request.auth.uid == resource.data.authorId || isAdmin());
+    }
+
+    // Stories Collection (expires naturally / 24h)
+    match /stories/{storyId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && isValidContent(request.resource.data.caption, 500);
+      allow update, delete: if isAuthenticated() && (request.auth.uid == resource.data.authorId || isAdmin());
+    }
+
+    // Comments Collection
+    match /posts/{postId}/comments/{commentId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && isValidContent(request.resource.data.text, 2000);
+      allow update, delete: if isAuthenticated() && (request.auth.uid == resource.data.authorId || isAdmin());
+    }
+
+    // Videos Collection
+    match /videos/{videoId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewsCount', 'likesCount']) ||
+        isAdmin()
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Projects Collection
+    match /projects/{projectId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && (
+        request.auth.uid in resource.data.collaborators || 
+        request.auth.uid == resource.data.ownerId || 
+        isAdmin()
+      );
+    }
+
+    // Study Sessions & Progress
+    match /study_progress/{userId}/sessions/{sessionId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
+    // User Notifications
+    match /users/{userId}/notifications/{notificationId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
+    // Moderation & Audit Logs (Admins only)
+    match /moderation_reports/{reportId} {
+      allow create: if isAuthenticated();
+      allow read, update, delete: if isAdmin();
+    }
+  }
+}
